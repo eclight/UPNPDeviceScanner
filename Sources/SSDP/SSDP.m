@@ -35,13 +35,20 @@ static NSError *nserror_from_errno() {
      isCancelled: (BOOL (^)(void))isCancelled
            error: (NSError**)error {
 
-    os_log_info(OS_LOG_DEFAULT, "SSDP discover started");
+    static os_log_t log = NULL;
+    static dispatch_once_t onceToken;
+    
+    dispatch_once(&onceToken, ^{
+        log = os_log_create("com.eclight.UPNPDeviceScanner", "SSDP");
+    });
+    
+    os_log_info(log, "SSDP discover started");
     
     *error = nil;
 
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
-        os_log(OS_LOG_DEFAULT, "Socket creation failed: %{errno}d", errno);
+        os_log(log, "Socket creation failed: %{errno}d", errno);
         *error = nserror_from_errno();
         goto finish;
     }
@@ -49,7 +56,7 @@ static NSError *nserror_from_errno() {
     struct timeval timeout = {SOCKET_TIMEOUT, 0};
     int err = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     if (err == -1) {
-        os_log(OS_LOG_DEFAULT, "setsockopt failed: %{errno}d", errno);
+        os_log(log, "setsockopt failed: %{errno}d", errno);
         *error = nserror_from_errno();
         goto finish;
     }
@@ -59,7 +66,7 @@ static NSError *nserror_from_errno() {
     destination_addr.sin_port = htons(SSDP_PORT);
     err = inet_pton(AF_INET, SSDP_ADDRESS, &destination_addr.sin_addr);
     if (err == -1) {
-        os_log(OS_LOG_DEFAULT, "inet_pton failed: %{errno}d", errno);
+        os_log(log, "inet_pton failed: %{errno}d", errno);
         *error = nserror_from_errno();
         goto finish;
     }
@@ -74,7 +81,7 @@ static NSError *nserror_from_errno() {
         long bytesSent = sendto(sock, DISCOVER_MESSAGE, strlen(DISCOVER_MESSAGE), 0, (struct sockaddr*)(&destination_addr), sizeof(destination_addr));
         
         if (bytesSent < 0) {
-            os_log(OS_LOG_DEFAULT, "sendto failed: %{errno}d", errno);
+            os_log(log, "sendto failed: %{errno}d", errno);
             *error = nserror_from_errno();
             goto finish;
         }
@@ -82,7 +89,7 @@ static NSError *nserror_from_errno() {
         struct timeval start, curr, elapsed = {0, 0};
         err = gettimeofday(&start, NULL);
         if (err == -1) {
-            os_log(OS_LOG_DEFAULT, "gettimeofday failed: %{errno}d", errno);
+            os_log(log, "gettimeofday failed: %{errno}d", errno);
             *error = nserror_from_errno();
             goto finish;
         }
@@ -96,7 +103,7 @@ static NSError *nserror_from_errno() {
             long bytes_received = recvfrom(sock, buffer, sizeof(buffer), 0, NULL, NULL);
             if (bytes_received == - 1) {
                 if (errno != EAGAIN) {
-                    os_log(OS_LOG_DEFAULT, "recv failed: %{errno}d", errno);
+                    os_log(log, "recv failed: %{errno}d", errno);
                 }
             }
             else if (bytes_received > 0 && bytes_received < sizeof(buffer)) {
@@ -106,7 +113,7 @@ static NSError *nserror_from_errno() {
             
             err = gettimeofday(&curr, NULL);
             if (err == -1) {
-                os_log(OS_LOG_DEFAULT, "gettimeofday failed: %{errno}d", errno);
+                os_log(log, "gettimeofday failed: %{errno}d", errno);
                 *error = nserror_from_errno();
                 goto finish;
             }
@@ -121,7 +128,7 @@ finish:
         close(sock);
     }
     
-    os_log_info(OS_LOG_DEFAULT, "SSDP discover finished");
+    os_log_info(log, "SSDP discover finished");
     
     return *error == nil;
 }

@@ -12,6 +12,10 @@ public enum DiscoverEvent {
     case discoverCompleted(Error?)
 }
 
+extension OSLog {
+    static let discoverySessionLog = OSLog(subsystem: "com.eclight.UPNPDeviceScanner", category: "DiscoverySession")
+}
+
 public final class DiscoverySession {
 
     public class Token {
@@ -66,7 +70,7 @@ public final class DiscoverySession {
                 switch $0 {
                 case let .success(result): discoverEventHandler(.deviceFound(RootDevice(url: url, description: result)))
                 case let .failure(error):
-                    os_log("%{public}@", log: .default, type: .error, String(describing: error))
+                    os_log("%{public}@", log: .discoverySessionLog, type: .error, String(describing: error))
                 }
             }
         }
@@ -78,13 +82,14 @@ public final class DiscoverySession {
                     if !knownUrls.contains(location) {
                         knownUrls.insert(location)
 
+                        os_log("Downloading device description for %{public}@", log: .discoverySessionLog, type: .info, location.absoluteString)
                         downloadDeviceDescription(location)
                     }
                 } else {
-                    os_log("Warning: SSDP response doesn't contain location", log: .default, type: .info)
+                    os_log("Warning: SSDP response doesn't contain location", log: .discoverySessionLog, type: .info)
                 }
             } catch {
-                os_log("Warning: failed to parse SSDP response", log: .default, type: .info)
+                os_log("Warning: failed to parse SSDP response", log: .discoverySessionLog, type: .info)
             }
         }
 
@@ -151,12 +156,7 @@ public final class DiscoverySession {
                     throw UPNPDeviceScannerError.networkError("Could not get \(url): got status code \(response.statusCode)")
                 }
 
-                do {
-                    return try decodeXml(T.self, data)
-                }
-                catch {
-                    throw UPNPDeviceScannerError.dataFormatError("Could not parse the content of \(url): \(error)")
-                }
+                return try decodeXml(T.self, data)
             }
 
             completion(result)
